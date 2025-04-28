@@ -7,7 +7,7 @@ static char inbuf[MAXBUF], tokbuf[2*MAXBUF],
 
 char *prompt = "Command> ";
 
-volatile pid_t pid_foregrnd = 0;
+pid_t pid_foregrnd = 0;
 
 /* Handles SIGINT (Ctrl+C) by killing foreground progress */
 void sact_int(int signo)
