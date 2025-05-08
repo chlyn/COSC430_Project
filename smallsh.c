@@ -8,7 +8,7 @@
 
 /* program buffers and work pointers */
 static char inbuf[MAXBUF], tokbuf[2*MAXBUF],
-            *ptr = inbuf, *tok = tokbuf;
+*ptr = inbuf, *tok = tokbuf;
 
 char *prompt = "Command> ";
 
@@ -16,11 +16,11 @@ typedef enum { RUNNING, STOPPED } job_state;
 
 /* Joblist linked list */
 typedef struct job {
-    int       job_id;   /* job id */
-    pid_t     pid;      /* child process id */
-    job_state state;    /* running or stopped */
-    int       where;    /* foreground 0 or background */
-    struct job *next;   /* link to next node */
+    int job_id; /* job id */
+    pid_t pid; /* child process id */
+    job_state state; /* running or stopped */
+    int where; /* foreground 0 or background */
+    struct job *next; /* link to next node */
 } job_t;
 
 /* head of the linked list */
@@ -88,8 +88,15 @@ static void handle_jobs(int signo)
     while ((pid = waitpid(-1, &status, WNOHANG|WUNTRACED|WCONTINUED)) > 0) {
         job_t *j = find_job_by_pid(pid);
         if (!j) continue;
-        /* here we only need to track for future bg or fg CONT */
-        if (WIFCONTINUED(status)) {
+        /* removing when a process naturallt ends (technically it only needs WIFEXITED to do that)*/
+        if (WIFEXITED(status) || WIFSIGNALED(status)) {
+            remove_job(j);
+
+        } else if (WIFSTOPPED(status)) {
+            j->state = STOPPED;
+            j->where = BACKGROUND;
+
+        } else if (WIFCONTINUED(status)) {
             j->state = RUNNING;
         }
     }
@@ -217,26 +224,42 @@ int runcommand(char **cline, int where)
     static struct sigaction sact;
 
     switch (pid = fork()) {
-        case -1:
-            perror("smallsh");
-            return -1;
-        case 0:
-            /* Child // reset handlers and exec */
+      case -1:
+        perror("smallsh");
+        return -1;
+
+      case 0:  /* child */
+        if (where == BACKGROUND) {
+            /* background jobs should ignore Ctrl–C otherwise they all get ended by ^C when pressed */
+            signal(SIGINT, SIG_IGN);
+        } else {
             sact.sa_handler = SIG_DFL;
             sigemptyset(&sact.sa_mask);
             sact.sa_flags = 0;
             sigaction(SIGINT, &sact, NULL);
-            sigaction(SIGTSTP, &sact, NULL);
-            execvp(*cline, cline);
-            perror(*cline);
-            exit(1);
+        }
+
+        /* in both FG and BG for ^Z */
+        sact.sa_handler = SIG_DFL;
+        sigemptyset(&sact.sa_mask);
+        sact.sa_flags = 0;
+        sigaction(SIGTSTP, &sact, NULL);
+
+        execvp(*cline, cline);
+        perror(*cline);
+        _exit(1);
     }
 
     /* Parent // record and wait if foreground */
     pid_foregrnd = pid;
     add_job(pid, where);
-    if (where == FOREGROUND)
+    
+    if (where == FOREGROUND) {
         waitpid(pid, &status, 0);
+        /* remove the FG job immediately once it exits(naturally ends) */
+        job_t *j = find_job_by_pid(pid);
+        if (j) remove_job(j);
+    }
     pid_foregrnd = 0;
     return status;
 }
@@ -304,51 +327,3 @@ int main()
         procline();
     return 0;
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
