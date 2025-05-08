@@ -1,35 +1,124 @@
 #include "smallsh.h"
 #include <stdlib.h>
+#include <unistd.h>
+#include <stdio.h>
+#include <signal.h>
+#include <sys/wait.h>
+#include <string.h>    /* for strcmp */
 
 /* program buffers and work pointers */
 static char inbuf[MAXBUF], tokbuf[2*MAXBUF],
-    *ptr = inbuf, *tok = tokbuf;
+            *ptr = inbuf, *tok = tokbuf;
 
 char *prompt = "Command> ";
 
+typedef enum { RUNNING, STOPPED } job_state;
+
+/* Joblist linked list */
+typedef struct job {
+    int       job_id;   /* job id */
+    pid_t     pid;      /* child process id */
+    job_state state;    /* running or stopped */
+    int       where;    /* foreground 0 or background */
+    struct job *next;   /* link to next node */
+} job_t;
+
+/* head of the linked list */
+static job_t *job_list_head = NULL;
+
+/* counter to assign the job ids */
+static int next_job_id = 1;
+
 pid_t pid_foregrnd = 0;
 
-/* Handles SIGINT (Ctrl+C) by killing foreground progress */
-void sact_int(int signo)
+/* Find the job whose j->pid matches */
+static job_t *find_job_by_pid(pid_t pid)
 {
-    if (pid_foregrnd > 0)
-    {
-        kill(pid_foregrnd, SIGKILL);
+    for (job_t *j = job_list_head; j; j = j->next) {
+        if (j->pid == pid) return j;
     }
-
-    /* Printing new line for the Command> prompt */
-    write(STDOUT_FILENO, "\n ", 1);
+    return NULL;
 }
 
-/* Handles SIGTSPT (Ctrl+C) by stopping foreground progress */
+/* removes node from linked list */
+static void remove_job(job_t *r)
+{
+    job_t **pp = &job_list_head;
+    while (*pp && *pp != r)
+        pp = &(*pp)->next;
+    if (*pp) {
+        *pp = r->next;
+        free(r);
+    }
+}
+
+/* Handles SIGINT (Ctrl+C) by killing foreground process */
+void sact_int(int signo)
+{
+    if (pid_foregrnd > 0) {
+        kill(pid_foregrnd, SIGKILL);
+        /* now remove it immediately from our job list */
+        job_t *j = find_job_by_pid(pid_foregrnd);
+        if (j) remove_job(j);
+    }
+    /* reprint prompt on its own line */
+    write(STDOUT_FILENO, "\n", 1);
+}
+
+/* Handles SIGTSTP (Ctrl+Z) by stopping foreground process */
 void sact_tstp(int signo)
 {
-    if (pid_foregrnd > 0)
-    {
+    if (pid_foregrnd > 0) {
         kill(pid_foregrnd, SIGSTOP);
+        /* mark it stopped and switch it to background */
+        job_t *j = find_job_by_pid(pid_foregrnd);
+        if (j) {
+            j->state = STOPPED;
+            j->where = BACKGROUND;
+        }
     }
-
     write(STDOUT_FILENO, "\n", 1);
+}
+
+/* update the values in the linked list */
+static void handle_jobs(int signo)
+{
+    pid_t pid;
+    int status;
+    while ((pid = waitpid(-1, &status, WNOHANG|WUNTRACED|WCONTINUED)) > 0) {
+        job_t *j = find_job_by_pid(pid);
+        if (!j) continue;
+        /* here we only need to track for future bg or fg CONT */
+        if (WIFCONTINUED(status)) {
+            j->state = RUNNING;
+        }
+    }
+}
+
+/* function to add jobs to linked list */
+static void add_job(pid_t pid, int where)
+{
+    job_t *j = malloc(sizeof *j);
+    j->job_id = next_job_id++;
+    j->pid = pid;
+    j->state = RUNNING;
+    j->where = where;
+    j->next = job_list_head;
+    job_list_head = j;
+}
+
+/* this prints all the jobs with ‘jobs’ */
+static void jobs_cmd(void)
+{
+    for (job_t *j = job_list_head; j; j = j->next) {
+        const char *st = (j->state == RUNNING) ? "Running" : "Stopped";
+        const char *wg = (j->where == BACKGROUND) ? "Background" : "Foreground";
+        printf("[%d] %d %s %s\n",
+               j->job_id,
+               j->pid,
+               st,
+               wg);
+    }
 }
 
 /* Print prompt and read a line */
@@ -46,23 +135,20 @@ int userin(char *p)
 
     count = 0;
 
-    while(1)
-    {
-        if((c = getchar()) == EOF)
-            return(EOF);
+    while (1) {
+        if ((c = getchar()) == EOF)
+            return EOF;
 
-        if(count < MAXBUF)
+        if (count < MAXBUF)
             inbuf[count++] = c;
 
-        if(c == '\n' && count < MAXBUF)
-        {
+        if (c == '\n' && count < MAXBUF) {
             inbuf[count] = '\0';
             return count;
         }
 
         /* If line too long restart */
-        if(c == '\n')
-        {
+        if (c == '\n') {
             printf("smallsh: input line too long\n");
             count = 0;
             printf("%s", p);
@@ -70,7 +156,7 @@ int userin(char *p)
     }
 }
 
-static char special [] = {' ', '\t', '&', ';', '\n', '\0'};
+static char special[] = {' ', '\t', '&', ';', '\n', '\0'};
 
 int inarg(char c)
 {
@@ -130,57 +216,41 @@ int runcommand(char **cline, int where)
     int status;
     static struct sigaction sact;
 
-    switch(pid = fork())
-    {
+    switch (pid = fork()) {
         case -1:
             perror("smallsh");
-            return(-1);
-
+            return -1;
         case 0:
-            /* Code for child */
-            /* Resetting signal handlers to default */
+            /* Child // reset handlers and exec */
             sact.sa_handler = SIG_DFL;
             sigemptyset(&sact.sa_mask);
             sact.sa_flags = 0;
             sigaction(SIGINT, &sact, NULL);
             sigaction(SIGTSTP, &sact, NULL);
-
             execvp(*cline, cline);
             perror(*cline);
-
             exit(1);
     }
 
-    /* Code for parent */
-    /* If background process print pid and exit */
+    /* Parent // record and wait if foreground */
     pid_foregrnd = pid;
-    if(waitpid(pid, &status, 0) == -1)
-        return(-1);
-
+    add_job(pid, where);
+    if (where == FOREGROUND)
+        waitpid(pid, &status, 0);
     pid_foregrnd = 0;
-
-    return(status);
+    return status;
 }
 
-void procline(void)          /* Process input line */
+void procline(void)  /* Process input line */
 {
-    char *arg[MAXARG + 1];  /* Pointer array for runcommand */
-    int toktype;            /* Type of token in command */
-    int narg;               /* Number of arguments so far */
-    int type;               /* FOREGROUND or BACKGROUND */
+    char *arg[MAXARG+1];
+    int toktype, narg = 0, type;
 
-    narg=0;
-
-    for(;;)                 /* Loop forever */
-    {
-        /* Take action according to token type */
-        switch(toktype = gettok(&arg[narg]))
-        {
-            case ARG: 
-                if(narg < MAXARG)
-                    narg++;
+    for (;;) {
+        switch (toktype = gettok(&arg[narg])) {
+            case ARG:
+                if (narg < MAXARG) narg++;
                 break;
-
             case EOL:
             case SEMICOLON:
             case AMPERSAND:
@@ -189,39 +259,96 @@ void procline(void)          /* Process input line */
                 else
                     type = FOREGROUND;
 
-                if(narg != 0)
-                {
+                if (narg != 0) {
                     arg[narg] = NULL;
-                    runcommand(arg, type);
+                    if (strcmp(arg[0], "jobs") == 0) {
+                        jobs_cmd();
+                    } else {
+                        runcommand(arg, type);
+                    }
                 }
 
-                if(toktype == EOL)
+                if (toktype == EOL)
                     return;
 
                 narg = 0;
                 break;
-                        
+
         }
     }
 }
 
 int main()
 {
-    static struct sigaction sact;
+    static struct sigaction sa;
 
     /* Creating SIGINT Handler */
-    sact.sa_handler = sact_int;
-    sigemptyset(&sact.sa_mask);
-    sact.sa_flags = SA_RESTART;
-    sigaction(SIGINT, &sact, NULL);
+    sa.sa_handler = sact_int;
+    sigemptyset(&sa.sa_mask);
+    sa.sa_flags = SA_RESTART;
+    sigaction(SIGINT, &sa, NULL);
 
     /* Creating SIGTSTP Handler */
-    sact.sa_handler = sact_tstp;
-    sigemptyset(&sact.sa_mask);
-    sact.sa_flags = SA_RESTART;
-    sigaction(SIGTSTP, &sact, NULL);
+    sa.sa_handler = sact_tstp;
+    sigemptyset(&sa.sa_mask);
+    sa.sa_flags = SA_RESTART;
+    sigaction(SIGTSTP, &sa, NULL);
 
-    while(userin(prompt) != EOF)
+    /* SIGCHLD handler */
+    sa.sa_handler = handle_jobs;
+    sigemptyset(&sa.sa_mask);
+    sa.sa_flags = SA_RESTART;
+    sigaction(SIGCHLD, &sa, NULL);
+
+    while (userin(prompt) != EOF)
         procline();
+    return 0;
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
