@@ -4,7 +4,7 @@
 #include <stdio.h>
 #include <signal.h>
 #include <sys/wait.h>
-#include <string.h>    /* for strcmp */
+#include <string.h> /* for strcmp */
 
 /* program buffers and work pointers */
 static char inbuf[MAXBUF], tokbuf[2*MAXBUF],
@@ -90,6 +90,7 @@ static void handle_jobs(int signo)
         if (!j) continue;
         /* removing when a process naturallt ends (technically it only needs WIFEXITED to do that)*/
         if (WIFEXITED(status) || WIFSIGNALED(status)) {
+            /* BG job already so finished remove it (as in the 60 seconds are over)*/
             remove_job(j);
 
         } else if (WIFSTOPPED(status)) {
@@ -215,13 +216,21 @@ int gettok(char **outptr)
     *tok++ = '\0';
     return type;
 }
-
-/* Execute a command with optional wait */
 int runcommand(char **cline, int where)
 {
     pid_t pid;
     int status;
-    static struct sigaction sact;
+    struct sigaction sa_default, sa_ign;
+
+    /* the signal actions we defined (the signal default) */
+    sa_default.sa_handler = SIG_DFL;
+    sigemptyset(&sa_default.sa_mask);
+    sa_default.sa_flags = 0;
+
+    /* ignore the signals */
+    sa_ign.sa_handler = SIG_IGN;
+    sigemptyset(&sa_ign.sa_mask);
+    sa_ign.sa_flags = 0;
 
     switch (pid = fork()) {
       case -1:
@@ -229,41 +238,46 @@ int runcommand(char **cline, int where)
         return -1;
 
       case 0:  /* child */
+        setpgid(0, getpgrp()); /* returns the sheels PGID, making sure the child joins the shells process group */
+
         if (where == BACKGROUND) {
-            /* background jobs should ignore Ctrl–C otherwise they all get ended by ^C when pressed */
-            signal(SIGINT, SIG_IGN);
-        } else {
-            sact.sa_handler = SIG_DFL;
-            sigemptyset(&sact.sa_mask);
-            sact.sa_flags = 0;
-            sigaction(SIGINT, &sact, NULL);
+            /* ignore ^C and ^Z */
+            sigaction(SIGINT, &sa_ign, NULL);
+            sigaction(SIGTSTP, &sa_ign, NULL);
+        } 
+        else {
+            /* for FOREGROUND, for ^C and ^Z*/
+            sigaction(SIGINT, &sa_default, NULL); /* terminates process ^C*/
+            sigaction(SIGTSTP, &sa_default, NULL); /* stops process ^Z */
         }
 
-        /* in both FG and BG for ^Z */
-        sact.sa_handler = SIG_DFL;
-        sigemptyset(&sact.sa_mask);
-        sact.sa_flags = 0;
-        sigaction(SIGTSTP, &sact, NULL);
-
-        execvp(*cline, cline);
-        perror(*cline);
+        execvp(cline[0], cline);
         _exit(1);
     }
 
-    /* Parent // record and wait if foreground */
+    /* parent */
+    setpgid(pid, getpgrp());
+
     pid_foregrnd = pid;
+
+    /* adds process to jobs list */
     add_job(pid, where);
-    
+
     if (where == FOREGROUND) {
-        waitpid(pid, &status, 0);
-        /* remove the FG job immediately once it exits(naturally ends) */
-        job_t *j = find_job_by_pid(pid);
-        if (j) remove_job(j);
+        /* wait for exit or stop */
+        /* if stopped (^Z), it stays in the list as STOPPED */
+        if (waitpid(pid, &status, WUNTRACED) > 0) {
+            if (WIFEXITED(status) || WIFSIGNALED(status)) {
+                /* will only enter here if the process was terminated ^C, and will be removed from the list */
+                job_t *j = find_job_by_pid(pid);
+                if (j) remove_job(j);
+            }
+        }
     }
+
     pid_foregrnd = 0;
     return status;
 }
-
 void procline(void)  /* Process input line */
 {
     char *arg[MAXARG+1];
