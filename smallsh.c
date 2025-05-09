@@ -29,9 +29,10 @@ static job_t *job_list_head = NULL;
 /* counter to assign the job ids */
 static int next_job_id = 1;
 
+/* PID of the currrent foreground process (o if none) */
 pid_t pid_foregrnd = 0;
 
-/* Find the job whose j->pid matches */
+/* Find the job with a matching PID, null if none found*/
 static job_t *find_job_by_pid(pid_t pid)
 {
     for (job_t *j = job_list_head; j; j = j->next) {
@@ -77,10 +78,12 @@ void sact_tstp(int signo)
             j->where = BACKGROUND;
         }
     }
+    /* reprint prompt on its own line */
     write(STDOUT_FILENO, "\n", 1);
 }
 
 /* update the values in the linked list */
+/* by the time the all finsihed this function might onloy handle when the process ends naturally*/
 static void handle_jobs(int signo)
 {
     pid_t pid;
@@ -89,15 +92,15 @@ static void handle_jobs(int signo)
         job_t *j = find_job_by_pid(pid);
         if (!j) continue;
         /* removing when a process naturallt ends (technically it only needs WIFEXITED to do that)*/
+        /* the WIFSIGNALED i believe is checking for the ^C signal but we dont need to check that here*/
+        /* can test to make sure and then remove WIFSIGNALED*/
         if (WIFEXITED(status) || WIFSIGNALED(status)) {
             /* BG job already so finished remove it (as in the 60 seconds are over)*/
             remove_job(j);
-
-        } else if (WIFSTOPPED(status)) {
-            j->state = STOPPED;
-            j->where = BACKGROUND;
-
-        } else if (WIFCONTINUED(status)) {
+        } else if (WIFCONTINUED(status)) { /* mark as running on sigcont */
+            /* i think this if statement will be removed later, it would be the FG command*/
+            /* however its prob better to make it so it changes the state to running in the*/
+            /* actual FG function, for example the ^C and ^Z do it in their own function*/
             j->state = RUNNING;
         }
     }
@@ -115,7 +118,7 @@ static void add_job(pid_t pid, int where)
     job_list_head = j;
 }
 
-/* this prints all the jobs with ‘jobs’ */
+/* this prints all the jobs with ‘jobs’ command */
 static void jobs_cmd(void)
 {
     for (job_t *j = job_list_head; j; j = j->next) {
@@ -256,8 +259,10 @@ int runcommand(char **cline, int where)
     }
 
     /* parent */
+    /* makes sure the child is in the shells PGID*/
     setpgid(pid, getpgrp());
 
+    /* record the foregeound pid*/
     pid_foregrnd = pid;
 
     /* adds process to jobs list */
@@ -275,7 +280,7 @@ int runcommand(char **cline, int where)
         }
     }
 
-    pid_foregrnd = 0;
+    pid_foregrnd = 0; /* its done waiting  for a foreground process*/
     return status;
 }
 void procline(void)  /* Process input line */
