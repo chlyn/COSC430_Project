@@ -132,6 +132,20 @@ static void jobs_cmd(void)
     }
 }
 
+/* when a user types 'help' it will bring up a little menu*/
+static void help_cmd(void) {
+    printf("__________________________________________________________________________________________\n\n");
+    printf("                                       || Commands ||                  \n\n");
+    printf("  Ctrl-C:     Will end a foreground process \n");
+    printf("  Ctrl-Z:     Will stop a foreground process \n");
+    printf("  jobs:       List all current jobs and their status\n");
+    printf("  fg <job>:   Change a stopped or running background to running in the foreground\n");    
+    printf("  bg <job>:   Change a stopped background to a running background\n");    
+    printf("  kill <job>: Terminate a job \n\n");    
+    printf("__________________________________________________________________________________________\n");
+    
+}
+
 /* Print prompt and read a line */
 int userin(char *p)
 {
@@ -303,7 +317,10 @@ void procline(void)  /* Process input line */
 
                 if (narg != 0) {
                     arg[narg] = NULL;
-                    if (strcmp(arg[0], "jobs") == 0) {
+                    if (strcmp(arg[0], "help") == 0) {
+                        help_cmd();
+                    }
+                    else if (strcmp(arg[0], "jobs") == 0) {
                         jobs_cmd();
                     } else {
                         runcommand(arg, type);
