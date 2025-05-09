@@ -14,6 +14,10 @@ A Unix-style shell with basic job control, implemented for COSC 430.
 
 - **`jobs` command**  
   Lists all current background and stopped jobs, showing job IDs, PIDs, states, and command names.
+  
+- **`help` command**  
+  Lists all commands in a user friendly display
+  ![image](https://github.com/user-attachments/assets/4ad2e4d2-04d7-4bb9-84cf-1601c7c2f15c)
 
 > **Work in progress:**  
 > The following built-in commands still need to be implemented:  
