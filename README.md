@@ -13,10 +13,12 @@ A Unix-style shell with basic job control, implemented for COSC 430.
   Pressing <kbd>Ctrl</kbd>+<kbd>Z</kbd> will suspend (stop) the foreground job and return control to the shell.
 
 - **`jobs` command**  
-  Lists all current background and stopped jobs, showing job IDs, PIDs, states, and command names.
+  Lists all current background and stopped jobs, showing job IDs, PIDs, states, and command names:
+  ![image](https://github.com/user-attachments/assets/cd40770a-b636-4b7e-958f-2e722888e039)
+
   
 - **`help` command**  
-  Lists all commands in a user friendly display
+  Lists all commands in a user friendly display:
   ![image](https://github.com/user-attachments/assets/e93a14a8-e285-46b4-8cff-00e6509f478e)
 
 - **`bg <job>` command**
