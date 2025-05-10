@@ -41,6 +41,15 @@ static job_t *find_job_by_pid(pid_t pid)
     return NULL;
 }
 
+/* Find the job with a matching JID, null if none found*/
+static job_t *find_job_by_jid(int jid)
+{
+    for (job_t *j = job_list_head; j; j = j->next) {
+        if (j->job_id == jid) return j;
+    }
+    return NULL;
+}
+
 /* removes node from linked list */
 static void remove_job(job_t *r)
 {
@@ -132,6 +141,33 @@ static void jobs_cmd(void)
     }
 }
 
+static void fg_cmd(int jid)
+{
+    job_t *j = find_job_by_jid(jid);
+        printf("fg: Job %d Not Found\n", jid);
+        return;
+    }
+
+    // Continue the job if it was stopped
+    if (j->state == STOPPED) {
+        kill(j->pid, SIGCONT);
+    }
+
+    j->where = FOREGROUND;
+    j->state = RUNNING;
+    pid_foregrnd = j->pid;
+
+    // Wait for it to finish or stop
+    int status;
+    if (waitpid(j->pid, &status, WUNTRACED) > 0) {
+        if (WIFEXITED(status) || WIFSIGNALED(status)) {
+            remove_job(j); // Remove if terminated
+        }
+    }
+
+    pid_foregrnd = 0;
+}
+
 /* when a user types 'help' it will bring up a little menu*/
 static void help_cmd(void) {
     printf("__________________________________________________________________________________________\n\n");
@@ -142,8 +178,7 @@ static void help_cmd(void) {
     printf("  fg <job>:   Change a stopped or running background to running in the foreground\n");    
     printf("  bg <job>:   Change a stopped background to a running background\n");    
     printf("  kill <job>: Terminate a job \n\n");    
-    printf("__________________________________________________________________________________________\n");
-    
+    printf("__________________________________________________________________________________________\n\n");
 }
 
 /* Print prompt and read a line */
@@ -233,6 +268,7 @@ int gettok(char **outptr)
     *tok++ = '\0';
     return type;
 }
+
 int runcommand(char **cline, int where)
 {
     pid_t pid;
@@ -297,6 +333,7 @@ int runcommand(char **cline, int where)
     pid_foregrnd = 0; /* its done waiting  for a foreground process*/
     return status;
 }
+
 void procline(void)  /* Process input line */
 {
     char *arg[MAXARG+1];
@@ -322,7 +359,17 @@ void procline(void)  /* Process input line */
                     }
                     else if (strcmp(arg[0], "jobs") == 0) {
                         jobs_cmd();
-                    } else {
+                    }
+                    else if (strcmp(arg[0], "fg") == 0 && narg == 2) {
+                        if (narg == 2) {
+                            int jid = atoi(arg[1]);
+                            fg_cmd(jid);
+                        }
+                        else {
+                            printf("Usage: fg <job_id>\n");
+                        }
+                    }
+                    else {
                         runcommand(arg, type);
                     }
                 }
