@@ -144,6 +144,8 @@ static void jobs_cmd(void)
 static void fg_cmd(int jid)
 {
     job_t *j = find_job_by_jid(jid);
+    if (!j)
+    {
         printf("fg: Job %d Not Found\n", jid);
         return;
     }
