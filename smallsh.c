@@ -412,6 +412,17 @@ void procline(void)  /* Process input line */
                             printf("Usage: bg <job_id>\n");
                         }
                     }
+                    // code that implements kill
+                    else if (strcmp(arg[0], "kill") == 0 && narg == 2) {
+                        int jid = atoi(arg[1]);
+                        job_t *j = find_job_by_jid(jid);
+                        if (j) {
+                            kill(j->pid, SIGKILL);
+                            remove_job(j);
+                        } else {
+                            printf("kill: Job %d not found\n", jid);
+                        }
+                    }
                     else {
                         runcommand(arg, type);
                     }
@@ -453,3 +464,5 @@ int main()
         procline();
     return 0;
 }
+
+
