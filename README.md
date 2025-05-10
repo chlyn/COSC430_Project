@@ -20,10 +20,10 @@ A Unix-style shell with basic job control, implemented for COSC 430.
   ![image](https://github.com/user-attachments/assets/e93a14a8-e285-46b4-8cff-00e6509f478e)
 
 - **`bg <job>` command**
-  Resumes a stopped job in the background
+  <br>Resumes a stopped job in the background
 
 - **`fg <job>` command**
-  Resumes a stopped job or currently running background job in the foreground
+  <br>Resumes a stopped job or currently running background job in the foreground
 
 > **Work in progress:**  
 > The following built-in commands still need to be implemented:  
