@@ -53,7 +53,7 @@ A Unix-style shell with basic job control, implemented for COSC 430.
 
 - **Scenario 5**
   <br>Checking if after running `fg <job>` on a stopped job or currently running background process, it resumes in the foreground and waits for completion.
-  ![image](https://github.com/user-attachments/assets/d15ec4b7-e8be-4089-b22d-f1090924d91c)
+  ![image](https://github.com/user-attachments/assets/f4daba86-32bf-495f-8c1d-912f80cd24b3)
 
 - **Scenario 6**
   <br>Checking if after running `bg <job>` on a stopped job. Jobs will show it has resumed and converted to BACKGROUND in the JobsList.
