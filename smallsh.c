@@ -63,7 +63,7 @@ static void remove_job(job_t *r)
 }
 
 /* Handles SIGINT (Ctrl+C) by killing foreground process */
-void sact_int(int signo)
+static void sact_int(int signo)
 {
     if (pid_foregrnd > 0) {
         kill(pid_foregrnd, SIGKILL);
@@ -76,7 +76,7 @@ void sact_int(int signo)
 }
 
 /* Handles SIGTSTP (Ctrl+Z) by stopping foreground process */
-void sact_tstp(int signo)
+static void sact_tstp(int signo)
 {
     if (pid_foregrnd > 0) {
         kill(pid_foregrnd, SIGSTOP);
@@ -168,6 +168,23 @@ static void fg_cmd(int jid)
     }
 
     pid_foregrnd = 0;
+}
+
+static void bg_cmd(int jid)
+{
+    job_t *j = find_job_by_jid(jid);
+    if (!j)
+    {
+        printf("bg: Job %d Not Found\n", jid);
+        return;
+    }
+
+    // Continue the job if it was stopped
+    if (j->state == STOPPED) {
+        kill(j->pid, SIGCONT);
+        j->where = BACKGROUND;
+        j->state = RUNNING;
+    }
 }
 
 /* when a user types 'help' it will bring up a little menu*/
@@ -369,6 +386,15 @@ void procline(void)  /* Process input line */
                         }
                         else {
                             printf("Usage: fg <job_id>\n");
+                        }
+                    }
+                    else if (strcmp(arg[0], "bg") == 0 && narg == 2) {
+                        if (narg == 2) {
+                            int jid = atoi(arg[1]);
+                            bg_cmd(jid);
+                        }
+                        else {
+                            printf("Usage: bg <job_id>\n");
                         }
                     }
                     else {
