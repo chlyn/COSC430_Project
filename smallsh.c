@@ -177,19 +177,6 @@ static void fg_cmd(int jid)
 
     /* Set the global variable pid_foregrnd to the job's PID (foreground process) */
     pid_foregrnd = j->pid;
-
-    /* Wait for the job to finish or stop using waitpid with WUNTRACED */
-    int status;
-    if (waitpid(j->pid, &status, WUNTRACED) > 0) {
-        if (WIFEXITED(status) || WIFSIGNALED(status)) {
-
-            /* If the job terminated, remove it from the job list */
-            remove_job(j); 
-
-        }
-    }
-
-    pid_foregrnd = 0;
 }
 
 /* Resumes the job if it’s currently stopped and brings it to the background */
