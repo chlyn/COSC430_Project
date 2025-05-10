@@ -17,7 +17,7 @@ A Unix-style shell with basic job control, implemented for COSC 430.
   
 - **`help` command**  
   Lists all commands in a user friendly display
-  ![image](https://github.com/user-attachments/assets/4ad2e4d2-04d7-4bb9-84cf-1601c7c2f15c)
+  ![image](https://github.com/user-attachments/assets/e93a14a8-e285-46b4-8cff-00e6509f478e)
 
 - **`bg <job>` command**
   Resumes a stopped job in the background
