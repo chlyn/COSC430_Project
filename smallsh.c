@@ -1,12 +1,15 @@
+/*  COSC 430 Project */
+/*  Group Members: Oluwabukunmi David Jaiyeoloa, Chenilyn Joy Espineda, Dayana Ferrufino */
+
 #include "smallsh.h"
 #include <stdlib.h>
 #include <unistd.h>
 #include <stdio.h>
 #include <signal.h>
 #include <sys/wait.h>
-#include <string.h> /* for strcmp */
+#include <string.h> /* For strcmp */
 
-/* program buffers and work pointers */
+/* Program buffers and work pointers */
 static char inbuf[MAXBUF], tokbuf[2*MAXBUF],
 *ptr = inbuf, *tok = tokbuf;
 
@@ -16,23 +19,23 @@ typedef enum { RUNNING, STOPPED } job_state;
 
 /* Joblist linked list */
 typedef struct job {
-    int job_id; /* job id */
-    pid_t pid; /* child process id */
-    job_state state; /* running or stopped */
-    int where; /* foreground 0 or background */
-    struct job *next; /* link to next node */
+    int job_id;         /* Job ID */
+    pid_t pid;          /* Child Process ID */
+    job_state state;    /* RUNNING or STOPPED */
+    int where;          /* FOREGROUND (0) or BACKGROUND (0) */
+    struct job *next;   /* Pointer to the next job in the list*/
 } job_t;
 
-/* head of the linked list */
+/* Head of the job linked list */
 static job_t *job_list_head = NULL;
 
-/* counter to assign the job ids */
+/* Counter to assign the job IDs */
 static int next_job_id = 1;
 
-/* PID of the currrent foreground process (o if none) */
+/* PID of the currrent foreground process (0 if none) */
 pid_t pid_foregrnd = 0;
 
-/* Find the job with a matching PID, null if none found*/
+/* Find the job with the specified PID, null if none found */
 static job_t *find_job_by_pid(pid_t pid)
 {
     for (job_t *j = job_list_head; j; j = j->next) {
@@ -41,7 +44,7 @@ static job_t *find_job_by_pid(pid_t pid)
     return NULL;
 }
 
-/* Find the job with a matching JID, null if none found*/
+/* Find the job with the specified JID, null if none found */
 static job_t *find_job_by_jid(int jid)
 {
     for (job_t *j = job_list_head; j; j = j->next) {
@@ -50,7 +53,7 @@ static job_t *find_job_by_jid(int jid)
     return NULL;
 }
 
-/* removes node from linked list */
+/* Removes a job from the job linked list */
 static void remove_job(job_t *r)
 {
     job_t **pp = &job_list_head;
@@ -66,12 +69,16 @@ static void remove_job(job_t *r)
 static void sact_int(int signo)
 {
     if (pid_foregrnd > 0) {
+
+        /* Send it SIGKILL to pause execution */
         kill(pid_foregrnd, SIGKILL);
-        /* now remove it immediately from our job list */
+        
+        /* Remove the job immediately from our job list */
         job_t *j = find_job_by_pid(pid_foregrnd);
         if (j) remove_job(j);
     }
-    /* reprint prompt on its own line */
+
+    /* Print a newline and prompt again */
     write(STDOUT_FILENO, "\n", 1);
 }
 
@@ -79,20 +86,24 @@ static void sact_int(int signo)
 static void sact_tstp(int signo)
 {
     if (pid_foregrnd > 0) {
+
+        /* Send it SIGSTOP to pause execution */
         kill(pid_foregrnd, SIGSTOP);
-        /* mark it stopped and switch it to background */
+        
+        /* Mark it as stopped and switch it to background */
         job_t *j = find_job_by_pid(pid_foregrnd);
         if (j) {
             j->state = STOPPED;
             j->where = BACKGROUND;
         }
     }
-    /* reprint prompt on its own line */
+
+    /* Print a newline and prompt again */
     write(STDOUT_FILENO, "\n", 1);
 }
 
-/* update the values in the linked list */
-/* by the time the all finsihed this function might onloy handle when the process ends naturally*/
+/* Handles SIGCHLD by updating the values in the job linked list */
+/* By the time the all finsihed this function might onloy handle when the process ends naturally*/
 static void handle_jobs(int signo)
 {
     pid_t pid;
@@ -100,22 +111,22 @@ static void handle_jobs(int signo)
     while ((pid = waitpid(-1, &status, WNOHANG|WUNTRACED|WCONTINUED)) > 0) {
         job_t *j = find_job_by_pid(pid);
         if (!j) continue;
-        /* removing when a process naturallt ends (technically it only needs WIFEXITED to do that)*/
-        /* the WIFSIGNALED i believe is checking for the ^C signal but we dont need to check that here*/
-        /* can test to make sure and then remove WIFSIGNALED*/
+        /* Removing when a process naturallt ends (technically it only needs WIFEXITED to do that)*/
+        /* WIFSIGNALED i believe is checking for the ^C signal but we dont need to check that here*/
+        /* Can test to make sure and then remove WIFSIGNALED*/
         if (WIFEXITED(status) || WIFSIGNALED(status)) {
             /* BG job already so finished remove it (as in the 60 seconds are over)*/
             remove_job(j);
         } else if (WIFCONTINUED(status)) { /* mark as running on sigcont */
-            /* i think this if statement will be removed later, it would be the FG command*/
-            /* however its prob better to make it so it changes the state to running in the*/
-            /* actual FG function, for example the ^C and ^Z do it in their own function*/
+            /* I think this if statement will be removed later, it would be the FG command*/
+            /* However its prob better to make it so it changes the state to running in the*/
+            /* Actual FG function, for example the ^C and ^Z do it in their own function*/
             j->state = RUNNING;
         }
     }
 }
 
-/* function to add jobs to linked list */
+/* Function to add jobs to job linked list */
 static void add_job(pid_t pid, int where)
 {
     job_t *j = malloc(sizeof *j);
@@ -127,7 +138,7 @@ static void add_job(pid_t pid, int where)
     job_list_head = j;
 }
 
-/* this prints all the jobs with ‘jobs’ command */
+/* Prints all the jobs with ‘jobs’ command */
 static void jobs_cmd(void)
 {
     for (job_t *j = job_list_head; j; j = j->next) {
@@ -141,53 +152,70 @@ static void jobs_cmd(void)
     }
 }
 
+/* Resumes the job if it’s currently stopped, brings it to the foreground and then waits for its termination */
 static void fg_cmd(int jid)
 {
+
+    /* Find the job by its job ID (jid) */
     job_t *j = find_job_by_jid(jid);
+
+    /* If job is not found, print an error message and return */
     if (!j)
     {
         printf("fg: Job %d Not Found\n", jid);
         return;
     }
 
-    // Continue the job if it was stopped
+    /* If the job is stopped, send SIGCONT to continue the job */
     if (j->state == STOPPED) {
         kill(j->pid, SIGCONT);
     }
 
+    /* Update the job's state to RUNNING and change its location to FOREGROUND */
     j->where = FOREGROUND;
     j->state = RUNNING;
+
+    /* Set the global variable pid_foregrnd to the job's PID (foreground process) */
     pid_foregrnd = j->pid;
 
-    // Wait for it to finish or stop
+    /* Wait for the job to finish or stop using waitpid with WUNTRACED */
     int status;
     if (waitpid(j->pid, &status, WUNTRACED) > 0) {
         if (WIFEXITED(status) || WIFSIGNALED(status)) {
-            remove_job(j); // Remove if terminated
+
+            /* If the job terminated, remove it from the job list */
+            remove_job(j); 
+
         }
     }
 
     pid_foregrnd = 0;
 }
 
+/* Resumes the job if it’s currently stopped and brings it to the background */
 static void bg_cmd(int jid)
 {
+    /* Find the job by its job ID (jid) */
     job_t *j = find_job_by_jid(jid);
+
+    /* If job is not found, print an error message and return */
     if (!j)
     {
         printf("bg: Job %d Not Found\n", jid);
         return;
     }
 
-    // Continue the job if it was stopped
+    /* If the job is stopped, send SIGCONT to continue the job in the background */
     if (j->state == STOPPED) {
         kill(j->pid, SIGCONT);
+
+        /* Update the job's state to RUNNING and change its location to BACKGROUND */
         j->where = BACKGROUND;
         j->state = RUNNING;
     }
 }
 
-/* when a user types 'help' it will bring up a little menu*/
+/* Displaying all commands available when running 'help' */
 static void help_cmd(void) {
     printf("__________________________________________________________________________________________\n\n");
     printf("                                       || Commands ||                  \n\n");
@@ -299,7 +327,7 @@ int runcommand(char **cline, int where)
     sigemptyset(&sa_default.sa_mask);
     sa_default.sa_flags = 0;
 
-    /* ignore the signals */
+    /* Ignore the signals */
     sa_ign.sa_handler = SIG_IGN;
     sigemptyset(&sa_ign.sa_mask);
     sa_ign.sa_flags = 0;
