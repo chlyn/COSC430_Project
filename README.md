@@ -31,7 +31,7 @@ A custom Unix-style shell, implemented for COSC 430. This shell replicates basic
 - **`fg <job>` command**
   <br>Moves a stopped or running background job to the foreground and updates its state to RUNNING and its location to FOREGROUND.
 
-  - **`bg <job>` command**
+- **`bg <job>` command**
   <br>Resumes a stopped job in the background and updates its state to RUNNING.
 
 > **Work in progress:**  
@@ -63,5 +63,5 @@ A custom Unix-style shell, implemented for COSC 430. This shell replicates basic
   <br>![image](https://github.com/user-attachments/assets/f4daba86-32bf-495f-8c1d-912f80cd24b3)
 
 - **Scenario 6**
-  <br>Checking if after running `bg <job>` on a stopped job, it resumes in the background and Jobs will show it as RUNNING in the JobsList.
+  <br>Verifying if after running `bg <job>` on a stopped job, it resumes in the background and Jobs will show it as RUNNING in the JobsList.
   <br>![image](https://github.com/user-attachments/assets/8e8fe96b-8a89-4767-899f-f704b869579f)
