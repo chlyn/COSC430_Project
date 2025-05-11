@@ -103,7 +103,6 @@ static void sact_tstp(int signo)
 }
 
 /* Handles SIGCHLD by updating the values in the job linked list */
-/* By the time the all finsihed this function might onloy handle when the process ends naturally*/
 static void handle_jobs(int signo)
 {
     pid_t pid;
@@ -111,16 +110,11 @@ static void handle_jobs(int signo)
     while ((pid = waitpid(-1, &status, WNOHANG|WUNTRACED|WCONTINUED)) > 0) {
         job_t *j = find_job_by_pid(pid);
         if (!j) continue;
-        /* Removing when a process naturallt ends (technically it only needs WIFEXITED to do that)*/
-        /* WIFSIGNALED i believe is checking for the ^C signal but we dont need to check that here*/
-        /* Can test to make sure and then remove WIFSIGNALED*/
+        /* Removing when a process naturally ends (technically it only needs WIFEXITED to do that) because WISIGNALED checks for a command like ^C, but it does not hurt to have it here too*/
         if (WIFEXITED(status) || WIFSIGNALED(status)) {
             /* BG job already so finished remove it (as in the 60 seconds are over)*/
             remove_job(j);
         } else if (WIFCONTINUED(status)) { /* mark as running on sigcont */
-            /* I think this if statement will be removed later, it would be the FG command*/
-            /* However its prob better to make it so it changes the state to running in the*/
-            /* Actual FG function, for example the ^C and ^Z do it in their own function*/
             j->state = RUNNING;
         }
     }
